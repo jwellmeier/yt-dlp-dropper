@@ -6,4 +6,6 @@ __pycache__/
 .vscode/
 *.swp
 .DS_Store
-backend/downloads/
+
+# Downloads now land in %USERPROFILE%\OneDrive\Downloads\ytdlp (outside the
+# repo), so nothing download-related needs to be ignored here anymore.

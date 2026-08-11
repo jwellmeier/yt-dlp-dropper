@@ -39,7 +39,7 @@ $env:YTDLP_BACKEND_URL = "http://127.0.0.1:5000"; python app.py
 - `POST /download` — spawns a daemon thread running `download_worker`; returns 202 immediately
 - `POST /cancel/<task_id>` — sets `task.cancelled` (a `threading.Event`); the progress hook raises `DownloadError("cancelled")` on next hook call
 - `download_worker` uses `yt-dlp` with `make_progress_hook` which checks `task.is_cancelled()` and broadcasts `download_event` via Socket.IO to all clients
-- Downloads land in `backend/downloads/` (mapped as Docker volume `/downloads`)
+- Downloads land in the host's `%USERPROFILE%\OneDrive\Downloads\ytdlp` folder: `docker-compose.yml` bind-mounts `${USERPROFILE}/OneDrive/Downloads` → `/output`, and the backend writes to `DOWNLOAD_DIR=/output/ytdlp` (created on startup via `mkdir(parents=True, exist_ok=True)`)
 
 **Key data flow:** frontend drops URL → `POST /download` → backend emits `download_event` via Socket.IO → `BackendClient.on_download_event` fires `task_event` signal → `ProgressWindow.handle_task_event` updates model and widget
 

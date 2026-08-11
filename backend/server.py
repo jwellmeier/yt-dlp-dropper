@@ -38,7 +38,9 @@ class DownloadTask:
             "filename": self.filename,
             "error": self.error,
         }
-        socketio.emit("download_event", payload, broadcast=True)
+        # Newer Flask-SocketIO broadcasts to all clients in the namespace by
+        # default and no longer accepts the broadcast= kwarg.
+        socketio.emit("download_event", payload)
 
     def set_status(self, status: str, message: str = None, progress: float = None, filename: str = None, error: str = None):
         self.status = status
@@ -76,13 +78,29 @@ def make_progress_hook(task: DownloadTask):
             if task.is_cancelled():
                 raise DownloadError("cancelled")
         elif status == "finished":
-            filename = info.get("filename")
+            # This fires when a single stream finishes downloading, BEFORE any
+            # merge/remux. The reported filename is a temporary per-format file
+            # (e.g. ".f399.mp4") that yt-dlp deletes during merging, so we only
+            # record it as a fallback and mark completion later (postprocessor
+            # hook / after download returns), once the final path is known.
+            task.filename = info.get("filename")
             task.set_status(
-                "completed",
-                message="Download completed",
+                "processing",
+                message="Processing (merging/converting)",
                 progress=100.0,
-                filename=filename,
             )
+
+    return hook
+
+
+def make_postprocessor_hook(task: DownloadTask):
+    def hook(info: dict):
+        # info_dict carries the current on-disk path; after the final
+        # postprocessor (merge/remux/move) it points at the finished .mp4.
+        info_dict = info.get("info_dict") or {}
+        filepath = info_dict.get("filepath")
+        if filepath:
+            task.filename = filepath
 
     return hook
 
@@ -91,10 +109,12 @@ def download_worker(task: DownloadTask):
     task.set_status("downloading", message="Starting download")
 
     ytdl_options = {
-        "format": "best",
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "merge_output_format": "mp4",
         "noplaylist": True,
         "outtmpl": str(DOWNLOAD_DIR / "%(title)s.%(ext)s"),
         "progress_hooks": [make_progress_hook(task)],
+        "postprocessor_hooks": [make_postprocessor_hook(task)],
         "quiet": True,
         "no_warnings": True,
         "ignoreerrors": False,
@@ -107,6 +127,17 @@ def download_worker(task: DownloadTask):
     try:
         with YoutubeDL(ytdl_options) as ydl:
             ydl.download([task.url])
+        # download() returned without raising: all downloading and
+        # postprocessing (merge/remux to mp4) is done. task.filename now holds
+        # the final on-disk path (set by the postprocessor hook, or the
+        # progress hook for single-file downloads with no postprocessing).
+        final_name = os.path.basename(task.filename) if task.filename else None
+        task.set_status(
+            "completed",
+            message=f"Saved {final_name}" if final_name else "Download completed",
+            progress=100.0,
+            filename=task.filename,
+        )
     except DownloadError as exc:
         if task.is_cancelled():
             task.set_status("cancelled", message="Download cancelled", error=str(exc))
@@ -154,4 +185,6 @@ def cancel(task_id: str):
 
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000)
+    # This is a local, single-user dev tool; the Werkzeug dev server is fine.
+    # Newer Flask-SocketIO refuses to start it without this explicit opt-in.
+    socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
