@@ -122,6 +122,10 @@ def download_worker(task: DownloadTask):
         "continuedl": True,
         "noprogress": False,
         "concurrent_fragment_downloads": 5,
+        # Allow yt-dlp to fetch its remote EJS challenge-solver components when a
+        # site (currently YouTube) needs them in addition to the local deno
+        # runtime. Without this some videos still fail the JS challenge.
+        "remote_components": ["ejs:github"],
     }
 
     try:
