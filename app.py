@@ -6,9 +6,8 @@ import uuid
 import requests
 import socketio
 from PySide6.QtCore import Qt, QObject, QRect, QSize, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
-    QAction,
     QApplication,
     QFrame,
     QHBoxLayout,
