@@ -38,7 +38,7 @@ class DownloadTask:
             "filename": self.filename,
             "error": self.error,
         }
-        socketio.emit("download_event", payload, broadcast=True)
+        socketio.emit("download_event", payload)
 
     def set_status(self, status: str, message: str = None, progress: float = None, filename: str = None, error: str = None):
         self.status = status
@@ -91,7 +91,7 @@ def download_worker(task: DownloadTask):
     task.set_status("downloading", message="Starting download")
 
     ytdl_options = {
-        "format": "best",
+        "format": "bestvideo+bestaudio/best",
         "noplaylist": True,
         "outtmpl": str(DOWNLOAD_DIR / "%(title)s.%(ext)s"),
         "progress_hooks": [make_progress_hook(task)],
@@ -154,4 +154,4 @@ def cancel(task_id: str):
 
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000)
+    socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
