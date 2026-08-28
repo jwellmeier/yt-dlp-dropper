@@ -99,6 +99,34 @@ class DownloadCardWidget(QFrame):
         self.retry_button.setVisible(self.task.status in ("error", "cancelled"))
 
 
+def resolve_internet_shortcut(path: str) -> str:
+    """If ``path`` is a Windows ``.url`` or macOS ``.webloc`` internet-shortcut
+    file, return the target URL stored inside it; otherwise return None.
+
+    Dragging a link out of a browser often hands the app a saved shortcut file
+    rather than the URL itself, so without this the file path gets submitted to
+    yt-dlp and fails immediately.
+    """
+    lower = path.lower()
+    try:
+        if lower.endswith(".url"):
+            with open(path, "r", encoding="utf-8-sig", errors="replace") as fh:
+                for line in fh:
+                    stripped = line.strip()
+                    if stripped[:4].lower() == "url=":
+                        return stripped[4:].strip() or None
+        elif lower.endswith(".webloc"):
+            import plistlib
+
+            with open(path, "rb") as fh:
+                data = plistlib.load(fh)
+            if isinstance(data, dict) and data.get("URL"):
+                return data["URL"]
+    except Exception:
+        return None
+    return None
+
+
 class DropZone(QLabel):
     dropped = Signal(str)
 
@@ -120,7 +148,8 @@ class DropZone(QLabel):
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
                 if url.isLocalFile():
-                    urls.append(url.toLocalFile())
+                    local_path = url.toLocalFile()
+                    urls.append(resolve_internet_shortcut(local_path) or local_path)
                 else:
                     urls.append(url.toString())
         elif event.mimeData().hasText():
